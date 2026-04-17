@@ -254,8 +254,8 @@ void loop() {
         delay(2000); //reset time
         
         unsigned long waitStart = millis();
-        while(digitalRead(pin2) == HIGH || digitalRead(pin3) == HIGH || 
-              digitalRead(pin4) == HIGH || digitalRead(pin5) == HIGH) {
+        while(digitalRead(pin2) == LOW || digitalRead(pin3) == LOW || 
+              digitalRead(pin4) == LOW || digitalRead(pin5) == LOW) {
                 
           if(millis() - waitStart > 2000) break; 
         }
