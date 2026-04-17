@@ -94,8 +94,8 @@ void setup() {
   pinMode(pin4, INPUT_PULLUP);
   pinMode(pin5, INPUT_PULLUP);
 
-  hScore = EEPROM.read(0);
-  if (hScore == 255) {
+  hScore = EEPROM.get(0, hScore);
+  if (hScore < 0 || hScore > 32000) {
     hScore = 0;
   }
 
@@ -133,7 +133,7 @@ void loop() {
       deltaY = 0;
       specialActive = false;
       whenToSpecial = 0;
-      EEPROM.update(0, 0); 
+      EEPROM.put(0, 0); 
       for (int i = 0; i < MAX_SNAKE_SIZE; i++) {
         snakeX[i] = pixelX;
         snakeY[i] = pixelY;
