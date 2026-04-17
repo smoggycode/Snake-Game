@@ -1,0 +1,285 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <EEPROM.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+
+#define MAX_SNAKE_SIZE 102
+
+#define pin2 2
+#define pin3 3
+#define pin4 4
+#define pin5 5
+
+#define FOOD_RADIUS 2
+#define SPECIAL_RADIUS 4
+
+#define moveInterval 50 //change speeed here
+#define specialTime 5000
+
+Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+unsigned long specialWait = 0;
+unsigned long lastMoveTime = 0;
+unsigned long secretHoldStartTime = 0;
+
+uint8_t snakeX[MAX_SNAKE_SIZE];
+uint8_t snakeY[MAX_SNAKE_SIZE];
+uint8_t snakeSize = 5;
+
+uint8_t whenToSpecial = 0;
+
+uint8_t foodX, foodY;
+uint8_t specialX, specialY;
+bool specialActive = false;
+
+int8_t deltaX = 0;
+int8_t deltaY = 0;
+int16_t pixelX = 64;
+int16_t pixelY = 36;
+
+int score = 0;
+int hScore = 0;
+
+void target(const __FlashStringHelper* m, int x, int y, int b, int a) {
+  oled.setCursor(x, y);
+  oled.setTextColor(a);
+  oled.setTextSize(b);
+  oled.print(m);
+}
+
+void spawnFood() {
+  bool isOnSnake;
+  do {
+    isOnSnake = false;
+    foodX = random(FOOD_RADIUS, SCREEN_WIDTH - FOOD_RADIUS);
+    foodY = random(FOOD_RADIUS + 12, SCREEN_HEIGHT - FOOD_RADIUS);
+
+    for (int i = 0; i < snakeSize; i++) {
+      if (abs(foodX - snakeX[i]) < 5 && abs(foodY - snakeY[i]) < 4) {
+        isOnSnake = true; // crash n die
+        break; 
+      }
+    }
+  }
+  while (isOnSnake);
+}
+
+void spawnSpecial() {
+  bool isOnSnake;
+  do {
+    isOnSnake = false;
+    specialX = random(SPECIAL_RADIUS, SCREEN_WIDTH - SPECIAL_RADIUS);
+    specialY = random(SPECIAL_RADIUS + 12, SCREEN_HEIGHT - SPECIAL_RADIUS);
+
+    for (int i = 0; i < snakeSize; i++) {
+      if (abs(specialX - snakeX[i]) < 8 && abs(specialY - snakeY[i]) < 6) {
+        isOnSnake = true;
+        break;
+      }
+    }
+  } 
+  while (isOnSnake);
+
+  specialWait = millis();
+  specialActive = true;
+}
+
+void setup() {
+  randomSeed(analogRead(A3));
+  pinMode(pin2, INPUT_PULLUP);
+  pinMode(pin3, INPUT_PULLUP);
+  pinMode(pin4, INPUT_PULLUP);
+  pinMode(pin5, INPUT_PULLUP);
+
+  hScore = EEPROM.read(0);
+  if (hScore == 255) {
+    hScore = 0;
+  }
+
+  if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    for (;;)
+      ;
+  }
+  oled.clearDisplay();
+  target(F("Hi chat"), 40, 32, 1, 1);
+  oled.display();
+  delay(5000);
+  oled.clearDisplay();
+  for (int i = 0; i < MAX_SNAKE_SIZE; i++) {
+    snakeX[i] = pixelX;
+    snakeY[i] = pixelY;
+  }
+  spawnFood();
+}
+
+void loop() {
+  oled.clearDisplay();
+  digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+  
+  if(digitalRead(pin4) == LOW && digitalRead(pin5) == LOW) { // wow oo secret also change the secret here if u want
+    if (secretHoldStartTime == 0) {
+      secretHoldStartTime = millis();
+    }
+    if (millis() - secretHoldStartTime >= 5000) {
+      score = 0;
+      hScore = 0;
+      snakeSize = 5;
+      pixelX = 64;
+      pixelY = 36;
+      deltaX = 0;
+      deltaY = 0;
+      specialActive = false;
+      whenToSpecial = 0;
+      EEPROM.update(0, 0); 
+      for (int i = 0; i < MAX_SNAKE_SIZE; i++) {
+        snakeX[i] = pixelX;
+        snakeY[i] = pixelY;
+      }
+      oled.clearDisplay();
+      target(F("SYSTEM RESET"), 30, 30, 1, 1);
+      oled.display();
+      delay(2000); 
+      spawnFood();
+      secretHoldStartTime = 0;
+    }
+  } 
+  else {
+    secretHoldStartTime = 0;
+  } 
+    
+  if (specialActive) { // special spawn here
+    unsigned long timeForSpecial = millis() - specialWait;
+    uint8_t secondsLeft = 0;
+    
+    if (specialTime > timeForSpecial) {
+      secondsLeft = (specialTime - timeForSpecial) / 1000;
+      
+      oled.setCursor(0, 0);
+      oled.print(secondsLeft);
+      oled.print(F("s to eat big ball"));
+      
+      if (abs(pixelX - specialX) < 8 && abs(pixelY - specialY) < 6) {
+        if (snakeSize < MAX_SNAKE_SIZE - 2) {
+          snakeX[snakeSize] = snakeX[snakeSize - 1];
+          snakeY[snakeSize] = snakeY[snakeSize - 1];
+          snakeX[snakeSize + 1] = snakeX[snakeSize - 1];
+          snakeY[snakeSize + 1] = snakeY[snakeSize - 1];
+          snakeSize += 2;
+        }
+        score += 2 * (10000 - timeForSpecial) / 500; 
+        specialActive = false;
+        
+        if (score > hScore) {
+          hScore = score;
+          EEPROM.put(0, hScore);
+        }
+      }
+    } 
+
+    else {
+      specialActive = false;
+    }
+  }
+
+ else {
+  oled.setCursor(0, 0);
+  oled.print(F("Score:")); // to change the upper part of the screen
+  oled.print(score);
+  oled.print(F(" H_Score:")); 
+  oled.print(hScore);
+}
+
+  oled.drawFastHLine(0, 9, 128, 1);
+
+  if (abs(pixelX - foodX) < 4 && abs(pixelY - foodY) < 3) {
+    if (snakeSize < MAX_SNAKE_SIZE - 2) {
+      snakeX[snakeSize] = snakeX[snakeSize - 1];
+      snakeY[snakeSize] = snakeY[snakeSize - 1];
+      snakeX[snakeSize + 1] = snakeX[snakeSize - 1];
+      snakeY[snakeSize + 1] = snakeY[snakeSize - 1];
+      snakeSize += 2; //change snake size here
+    }
+    whenToSpecial += 1;
+    score += 2;
+
+    if (score > hScore) {
+      hScore = score;
+      EEPROM.put(0, hScore);
+    }
+    spawnFood();
+
+    if (whenToSpecial % 5 == 0) {
+      spawnSpecial();
+    }
+  }
+
+  // 2: Down
+  // 3: Up
+  // 4: Right
+  // 5: Left
+  if (digitalRead(pin4) == LOW && deltaX != -1) { deltaX = 1; deltaY = 0; }
+  if (digitalRead(pin5) == LOW && deltaX != 1) { deltaX = -1; deltaY = 0; }
+  if (digitalRead(pin3) == LOW && deltaY != 1) { deltaX = 0; deltaY = -1; }
+  if (digitalRead(pin2) == LOW && deltaY != -1) { deltaX = 0; deltaY = 1; }
+
+  if (millis() - lastMoveTime >= moveInterval) {
+    lastMoveTime = millis();
+
+    for (int i = snakeSize - 1; i > 0; i--) {
+      snakeX[i] = snakeX[i - 1];
+      snakeY[i] = snakeY[i - 1];
+    }
+    snakeX[0] = pixelX;
+    snakeY[0] = pixelY;
+
+    pixelX += (deltaX * 3);
+    pixelY += (deltaY * 2);
+
+    if (pixelX > 127) pixelX = 0;
+    if (pixelX < 0)   pixelX = 127;
+    if (pixelY > 63)  pixelY = 10;
+    if (pixelY < 10)  pixelY = 63;
+
+    for (int i = 3; i < snakeSize; i++) {
+      if ((deltaX != 0 || deltaY != 0) && 
+        abs(pixelX - snakeX[i]) < 3 && 
+        abs(pixelY - snakeY[i]) < 2) {
+
+        oled.clearDisplay();
+        target(F("YOU LOSE"), 40, 32, 1, 1); //die
+        oled.display();
+        delay(2000); //reset time
+        
+        unsigned long waitStart = millis();
+        while(digitalRead(pin2) == HIGH || digitalRead(pin3) == HIGH || 
+              digitalRead(pin4) == HIGH || digitalRead(pin5) == HIGH) {
+                
+          if(millis() - waitStart > 2000) break; 
+        }
+
+        score = 0; snakeSize = 5; pixelX = 64; pixelY = 36;
+        deltaX = 0; deltaY = 0; whenToSpecial = 0;
+        specialActive = false;
+
+        for (int j = 0; j < MAX_SNAKE_SIZE; j++) { snakeX[j] = pixelX; snakeY[j] = pixelY; }
+
+        spawnFood();
+        return;
+      }
+    }
+  }
+
+  for (int i = 0; i < snakeSize; i++) {
+    oled.fillRect(snakeX[i], snakeY[i], 3, 2, 1);
+  }
+
+  if (specialActive) {
+    oled.fillCircle(specialX, specialY, SPECIAL_RADIUS, 1);
+  }
+
+  oled.fillCircle(foodX, foodY, 2, 1);
+  oled.display();
+}
