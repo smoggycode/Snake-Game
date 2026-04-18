@@ -158,7 +158,7 @@ void loop() {
       secondsLeft = (specialTime - timeForSpecial) / 1000;
       
       oled.setCursor(0, 0);
-      oled.print(secondsLeft);
+      oled.print(secondsLeft+1);
       oled.print(F("s to eat big ball"));
       
       if (abs(pixelX - specialX) < 8 && abs(pixelY - specialY) < 6) {
